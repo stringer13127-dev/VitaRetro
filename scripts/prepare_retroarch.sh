@@ -33,14 +33,14 @@ if [ ! -s "$DATA" ]; then
   curl -fL --retry 3 "$DATA_URL" -o "$DATA"
 fi
 command -v 7z >/dev/null || { echo "7z is required for official Vita data" >&2; exit 2; }
-rm -rf "$DEST/data" "$DEST/data-extracted"
-mkdir -p "$DEST/data-extracted"
+rm -rf "$DEST/package" "$DEST/data-extracted"
+mkdir -p "$DEST/package" "$DEST/data-extracted"
 7z x -y "$DATA" -o"$DEST/data-extracted" >/dev/null
 if [ -d "$DEST/data-extracted/retroarch" ]; then
-  mv "$DEST/data-extracted/retroarch" "$DEST/data"
+  mv "$DEST/data-extracted/retroarch" "$DEST/package/retroarch-data"
 else
-  mv "$DEST/data-extracted" "$DEST/data"
+  mv "$DEST/data-extracted" "$DEST/package/retroarch-data"
 fi
 rm -rf "$DEST/data-extracted"
-test -n "$(find "$DEST/data" -type f -print -quit)"
+test -n "$(find "$DEST/package/retroarch-data" -type f -print -quit)"
 echo "Prepared official RetroArch Vita data."

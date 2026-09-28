@@ -45,19 +45,6 @@ foreach(core_name IN LISTS RETROARCH_CORE_NAMES)
   list(APPEND VPK_FILES FILE "${core}" "retroarch/${core_name}_libretro.self")
 endforeach()
 
-file(GLOB_RECURSE RETROARCH_DATA_FILES RELATIVE "${CMAKE_SOURCE_DIR}/vendor/retroarch/data"
-  "${CMAKE_SOURCE_DIR}/vendor/retroarch/data/*")
-if(NOT RETROARCH_DATA_FILES)
-  message(FATAL_ERROR "Official RetroArch Vita data is missing")
-endif()
-foreach(data_file IN LISTS RETROARCH_DATA_FILES)
-  if(NOT IS_DIRECTORY "${CMAKE_SOURCE_DIR}/vendor/retroarch/data/${data_file}")
-    list(APPEND VPK_FILES FILE
-      "${CMAKE_SOURCE_DIR}/vendor/retroarch/data/${data_file}"
-      "retroarch-data/${data_file}")
-  endif()
-endforeach()
-
 vita_create_vpk(VitaRetro_0.1_DEV.vpk VRET00001 eboot.bin
   VERSION 00.10
   NAME "VitaRetro 0.1 DEV"
