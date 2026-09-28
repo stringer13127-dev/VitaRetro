@@ -17,7 +17,7 @@ jobs:
         shell: bash
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends p7zip-full
+          apt-get install -y --no-install-recommends unzip p7zip-full
 
       - name: Prepare RetroArch Vita and build VitaRetro
         shell: bash
