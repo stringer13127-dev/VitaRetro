@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-"$ROOT/scripts/prepare_retroarch.sh"
+bash "$ROOT/scripts/prepare_retroarch.sh"
 : "${VITASDK:?VITASDK must point to VitaSDK}"
 rm -rf "$ROOT/build"
 cmake -S "$ROOT" -B "$ROOT/build" -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
