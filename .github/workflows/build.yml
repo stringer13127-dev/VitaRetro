@@ -1,0 +1,36 @@
+name: Build VitaRetro VPK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: vitasdk/vitasdk:2026.08
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install archive extractor
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends p7zip-full
+
+      - name: Prepare RetroArch Vita and build VitaRetro
+        shell: bash
+        run: |
+          bash scripts/build_vpk.sh
+
+      - name: Verify package contents
+        shell: bash
+        run: bash scripts/verify_vpk.sh VitaRetro_0.1_DEV.vpk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VitaRetro-0.1-DEV
+          path: VitaRetro_0.1_DEV.vpk
+          if-no-files-found: error
+          retention-days: 30
