@@ -4,9 +4,9 @@ VitaRetro is a PS Vita homebrew prototype. The app version remains **0.1 DEV** u
 
 ## Current prototype
 
-- Native 960 × 544 display, source picker, compact rows, and search/filter layout.
-- Five **unconfigured** source slots. The cards and search results currently shown are placeholders, not a live provider catalog or screenshots of a running build.
-- The X button on a placeholder game looks for `ux0:/data/VitaRetro/roms/demo.sfc` or `demo.md`; neither is bundled. There is no automatic game download yet.
+- Native 960 × 544 display with five URL slots. Choose an empty source, scan the displayed QR from a phone on the same Wi-Fi, paste **one global site URL**, and submit. VitaRetro serves the pairing form locally on port 28781 with a random session path and saves the URL on the Vita under `ux0:/data/VitaRetro/sources.txt`. Square lets you replace an existing source URL. This pairing flow has been compiled in CI but still needs a real Vita and network test.
+- A saved URL currently identifies the source; it does **not** turn an arbitrary website into a searchable game catalog. Site-specific provider adapters, network parsing, filters, and automatic downloads are not implemented. The UI states this directly rather than displaying fake results.
+- Triangle from the source picker opens an explicit local demo test. X looks for a user-provided `ux0:/data/VitaRetro/roms/demo.sfc` or `demo.md`; neither is bundled.
 - A Vita-specific resolver for NES, SNES, GB/GBC, GBA, Mega Drive and PS1. `.bin` is ambiguous: a catalog provider must supply the actual platform for reliable PS1/Genesis selection. PS1 compatibility can require a user-supplied BIOS.
 
 ## Cloud build
@@ -21,7 +21,7 @@ The command for an equivalent VitaSDK environment is `bash scripts/build_vpk.sh`
 
 ## Next work
 
-Test installation/startup on a real Vita while keeping version 0.1 DEV. Then build actual source adapters, pairing and catalog navigation, platform metadata, legal content handling, and launch validation. The UI currently does not offer those features.
+Test installation/startup and local phone pairing on a real Vita while keeping version 0.1 DEV. Then build actual source adapters, catalog navigation, platform metadata, legal content handling, and launch validation. No arbitrary site's catalog can be inferred safely from its URL alone.
 
 Libretro Vita installation documentation: https://docs.libretro.com/guides/install-psv/
 RetroArch source and licenses: https://github.com/libretro/RetroArch

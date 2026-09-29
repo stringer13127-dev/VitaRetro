@@ -20,15 +20,15 @@
 - Tabs.
 - Global-search toggle.
 - Demo grouped-results screen.
-- Source detail placeholder for QR/global URL provider.
+- Pairing now uses a Vita-hosted local Wi-Fi form and QR with a random session path; one URL per slot persists in `ux0:/data/VitaRetro/sources.txt`. This is build verified, hardware unverified.
 - GitHub Actions build workflow using official vitasdk/vitasdk:2026.08.
 
 ## Next engineering tasks
 1. Compile and install 0.1 DEV on real Vita; fix any SDK/link/runtime issue before increasing version.
-2. Add Vita IME/search text entry.
+2. Add Vita IME/search text entry as a fallback when the phone cannot reach the Vita on local Wi-Fi.
 3. Implement provider interface: probe, catalog search, categories, detail page, emulator list, homebrew list.
 4. Implement safe HTTP(S) client and cache with per-source timeout/failure isolation.
-5. Implement QR-pair flow through zero-cost Cloudflare Worker/Pages endpoint.
+5. Validate the local QR pairing on Vita hardware and offer an optional relay only if local network isolation blocks phone access.
 6. Add source enable/disable and source health status.
 7. Add metadata normalization while preserving per-source result sections.
 8. Detect/install supported emulators from authorized public releases.

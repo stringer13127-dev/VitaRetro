@@ -6,6 +6,8 @@
 #include <string.h>
 #include <stdio.h>
 #include "retroarch_manager.hpp"
+#include "source_pairing.hpp"
+#include "vendor/qrcodegen.h"
 
 static const int W=960,H=544,STRIDE=960;
 static uint32_t* fb=nullptr; static SceUID fb_uid=-1;
@@ -25,26 +27,106 @@ static void text(int x,int y,const char*s,uint32_t c,int scale=2){int ox=x;for(;
 static int tw(const char*s,int scale=2){return(int)strlen(s)*6*scale;}
 
 static const uint32_t BG=0xFF181818u, SIDEBAR=0xFF151515u, PANEL=0xFF2B2B2Bu, PANEL2=0xFF3A3A3Au, TEXT=0xFFF3F3F3u, MUTED=0xFFB0B0B0u, ACCENT=0xFF6EE0A8u, WHITE=0xFFFFFFFFu;
-static int screenMode=0; // 0 source picker, 1 home, 2 search
+static int screenMode=0; // 0 source picker, 1 demo, 2 search, 3 local phone pairing
 static int sourceSelected=0, menuSelected=1, gameSelected=0, rowSelected=0;
 static bool globalSearch=false;
 static char launchMessage[96]="RETROARCH: VERIFICATION...";
-static const char* sources[5]={"SOURCE 1","SOURCE 2","SOURCE 3","SOURCE 4","SOURCE 5"};
 static const char* menuItems[7]={"SOURCE","RECHERCHE & FILTRES","ACCUEIL","JEUX","EMULATEURS","HOMEBREWS","PARAMETRES"};
 
 static void status(const char*m){rect(0,H-24,W,24,rgb(14,14,14));text(18,H-17,m,MUTED,1);}
 static void sideIcon(int y,const char*label,bool sel){if(sel){rect(12,y-8,194,42,PANEL2);border(12,y-8,194,42,2,WHITE);}text(34,y,label,sel?TEXT:MUTED,1);}
-static void sidebar(){rect(0,0,220,H,SIDEBAR);text(30,18,"VITARETRO",TEXT,2);text(30,38,"0.1 DEV",MUTED,1);for(int i=1;i<7;i++)sideIcon(84+i*56,menuItems[i],menuSelected==i);text(30,68,sources[sourceSelected],ACCENT,1);}
+static void sidebar(){rect(0,0,220,H,SIDEBAR);text(30,18,"VITARETRO",TEXT,2);text(30,38,"0.1 DEV",MUTED,1);for(int i=1;i<7;i++)sideIcon(84+i*56,menuItems[i],menuSelected==i);const char* name=vrSource(sourceSelected).name;text(30,68,*name?name:"SOURCE VIDE",ACCENT,1);}
 static void cover(int x,int y,int w,int h,const char*title,const char*plat,bool sel,int tint){rect(x,y,w,h,rgb(38+tint,42+tint/2,48));if(sel)border(x-3,y-3,w+6,h+6,3,WHITE);rect(x+10,y+10,w-20,h-45,rgb(50+tint/2,60,68+tint));text(x+12,y+h-29,plat,MUTED,1);text(x+12,y+h-14,title,TEXT,1);}
 static void row(int y,const char*title,int rowIndex){text(248,y,title,TEXT,2);int x=250;for(int i=0;i<6;i++){char n[24];snprintf(n,sizeof(n),"JEU %d",i+1);cover(x,y+28,103,122,n,(i%2)?"SNES":"MEGADRIVE",rowSelected==rowIndex&&gameSelected==i,i*4);x+=115;}}
 
-static void sourcePicker(){clear(BG);text(286,72,"CHOISIR UNE SOURCE",TEXT,3);text(325,108,"5 EMPLACEMENTS CONFIGURABLES",MUTED,1);int x=94;for(int i=0;i<5;i++){int y=180,w=145,h=170;rect(x,y,w,h,PANEL);if(i==sourceSelected)border(x-4,y-4,w+8,h+8,4,WHITE);rect(x+22,y+22,w-44,92,PANEL2);text(x+48,y+58,"+",TEXT,3);text(x+24,y+126,sources[i],TEXT,1);text(x+24,y+144,"NON CONFIGUREE",MUTED,1);x+=168;}status("GAUCHE/DROITE SOURCE  X OUVRIR  TRIANGLE ACCUEIL DEMO  START QUITTER");}
+static void sourcePicker(){clear(BG);text(286,72,"CHOISIR UNE SOURCE",TEXT,3);text(325,108,"UNE URL GLOBALE PAR SITE",MUTED,1);int x=94;for(int i=0;i<5;i++){int y=180,w=145,h=170;rect(x,y,w,h,PANEL);if(i==sourceSelected)border(x-4,y-4,w+8,h+8,4,WHITE);rect(x+22,y+22,w-44,92,PANEL2);text(x+48,y+58,*vrSource(i).url?"OK":"+",TEXT,3);char label[25];snprintf(label,sizeof(label),"SOURCE %d",i+1);text(x+24,y+126,label,TEXT,1);char name[19];snprintf(name,sizeof(name),"%s",*vrSource(i).url?vrSource(i).name:"AJOUTER URL");text(x+24,y+144,name,MUTED,1);x+=168;}status("GAUCHE/DROITE SOURCE  X AJOUTER/OUVRIR  CARRE MODIFIER URL  TRIANGLE DEMO");}
 
-static void home(){clear(BG);sidebar();text(248,24,"ACCUEIL",TEXT,3);text(248,52,"CONTENU DE LA SOURCE ACTIVE",MUTED,1);row(88,"NOUVEAUTES ET AJOUTS RECENTS",0);row(270,"POPULAIRES",1);text(248,448,launchMessage,MUTED,1);text(248,466,"X JOUER - DETECTION AUTO DU CORE",MUTED,1);status("HAUT/BAS RUBRIQUE  GAUCHE/DROITE JEU  X JOUER  TRIANGLE RECHERCHE & FILTRES  O SOURCES");}
+static void pairingScreen(){clear(BG);text(70,50,"AJOUTER UNE SOURCE",TEXT,3);char label[40];snprintf(label,sizeof(label),"EMPLACEMENT %d - URL GLOBALE DU SITE",sourceSelected+1);text(72,96,label,ACCENT,2);const uint8_t* matrix=vrPairQr();if(matrix){int size=qrcodegen_getSize(matrix),step=size>41?4:5,x=565,y=135;rect(x-20,y-20,(size+8)*step,(size+8)*step,WHITE);for(int yy=0;yy<size;yy++)for(int xx=0;xx<size;xx++)if(qrcodegen_getModule(matrix,xx,yy))rect(x+xx*step,y+yy*step,step,step,BG);}text(72,159,"1. CONNECTE TON TELEPHONE AU MEME WIFI",TEXT,1);text(72,184,"2. SCANNE LE QR ET COLLE L URL DU SITE",TEXT,1);text(72,209,"3. APPUIE SUR ENREGISTRER",TEXT,1);text(72,260,vrPairStatus(),ACCENT,2);text(72,307,"UNE SEULE URL POUR TOUTE LA SOURCE",MUTED,1);text(72,330,"LE CATALOGUE DU SITE NECESSITE UN ADAPTATEUR",MUTED,1);text(72,445,vrPairUrl(),TEXT,1);status(vrPairReceived()?"URL ENREGISTREE - X RETOUR AUX SOURCES  O FERMER":"O FERMER  TELEPHONE ET VITA SUR LE MEME WIFI");}
+
+static void home(){clear(BG);sidebar();text(248,24,"SOURCE CONFIGUREE",TEXT,3);text(248,56,vrSource(sourceSelected).name,ACCENT,2);text(248,88,vrSource(sourceSelected).url,TEXT,1);text(248,138,"URL ENREGISTREE SUR CETTE VITA",TEXT,2);text(248,172,"CATALOGUE ET RECHERCHE A CONNECTER AU SITE",MUTED,1);text(248,207,"AUCUN JEU TELECHARGE AUTOMATIQUEMENT",MUTED,1);text(248,260,"RETROARCH : CORES PS VITA INTEGRES",TEXT,2);text(248,293,launchMessage,MUTED,1);text(248,340,"CARRE : MODIFIER L URL DE CETTE SOURCE",TEXT,1);status("CARRE MODIFIER URL  TRIANGLE RECHERCHE  O SOURCES");}
 
 static void toggle(int x,int y,bool on){rect(x,y,64,24,on?ACCENT:rgb(92,92,92));rect(on?x+42:x+4,y+4,18,16,WHITE);}
 static void chip(int x,int y,const char*s,bool active){int w=tw(s,1)+24;rect(x,y,w,28,active?PANEL2:PANEL);border(x,y,w,28,1,active?WHITE:rgb(72,72,72));text(x+12,y+10,s,active?TEXT:MUTED,1);}
-static void searchScreen(){clear(BG);sidebar();menuSelected=1;text(248,24,"RECHERCHE & FILTRES",TEXT,3);rect(248,62,620,46,PANEL2);text(270,78,"RECHERCHER UN JEU...",MUTED,2);text(248,132,"RECHERCHE GLOBALE",TEXT,2);toggle(480,126,globalSearch);text(248,178,"FILTRES",TEXT,2);chip(248,210,"PLATEFORME",true);chip(370,210,"GENRE",false);chip(448,210,"ANNEE",false);chip(526,210,"LANGUE",false);chip(624,210,"TOUT-PETITS",false);chip(748,210,"A-Z",false);text(248,262,"RESULTATS PAR SOURCE",TEXT,2);for(int s=0;s<3;s++){char ss[24];snprintf(ss,sizeof(ss),"SOURCE %d",s+1);text(248,302+s*70,ss,ACCENT,1);for(int i=0;i<4;i++){int x=340+i*130;rect(x,288+s*70,116,52,PANEL);text(x+10,302+s*70,"JEU TEST",TEXT,1);text(x+10,320+s*70,(i%2)?"SNES":"PS1",MUTED,1);}}status("SELECT GLOBAL  X FILTRE  O RETOUR");}
+static void searchScreen(){clear(BG);sidebar();menuSelected=1;text(248,24,"RECHERCHE & FILTRES",TEXT,3);text(248,88,"RECHERCHE GLOBALE",TEXT,2);toggle(480,82,globalSearch);text(248,146,"AUCUN CATALOGUE CONNECTE AUX SOURCES",MUTED,2);text(248,184,"L AJOUT D URL EST DISPONIBLE DEPUIS SOURCES",MUTED,1);status("SELECT GLOBAL  O RETOUR");}
+static void demoScreen(){clear(BG);text(248,24,"DEMO LOCALE - AUCUN JEU INCLUS",TEXT,2);row(88,"FICHIERS DE TEST PERSONNELS",0);text(248,310,"PLACE DEMO.SFC OU DEMO.MD DANS UX0:/DATA/VITARETRO/ROMS",MUTED,1);text(248,448,launchMessage,MUTED,1);status("X TESTER SON FICHIER LOCAL  O SOURCES");}
 
-int main(){snprintf(launchMessage,sizeof(launchMessage),"RETROARCH: %s",vrRetroArchPayloadPresent()?"CORES PRESENTS - LANCEMENT A TESTER":"CORES ABSENTS DU BUILD"); SceKernelAllocMemBlockOpt opt;memset(&opt,0,sizeof(opt));opt.size=sizeof(opt);opt.attr=SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_HAS_ALIGNMENT;opt.alignment=256*1024;fb_uid=sceKernelAllocMemBlock("VitaRetroFB",SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,STRIDE*H*4,&opt);if(fb_uid<0)return-1;void*base=nullptr;sceKernelGetMemBlockBase(fb_uid,&base);fb=(uint32_t*)base;SceDisplayFrameBuf dfb;memset(&dfb,0,sizeof(dfb));dfb.size=sizeof(dfb);dfb.base=fb;dfb.pitch=STRIDE;dfb.pixelformat=SCE_DISPLAY_PIXELFORMAT_A8B8G8R8;dfb.width=W;dfb.height=H;sceDisplaySetFrameBuf(&dfb,SCE_DISPLAY_SETBUF_NEXTFRAME);sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);SceCtrlData pad;memset(&pad,0,sizeof(pad));unsigned old=0;bool run=true;while(run){sceCtrlPeekBufferPositive(0,&pad,1);unsigned p=pad.buttons&~old;old=pad.buttons;if(p&SCE_CTRL_START)run=false;if(screenMode==0){if(p&SCE_CTRL_LEFT)sourceSelected=(sourceSelected+4)%5;if(p&SCE_CTRL_RIGHT)sourceSelected=(sourceSelected+1)%5;if(p&SCE_CTRL_CROSS)screenMode=1;if(p&SCE_CTRL_TRIANGLE)screenMode=1;}else if(screenMode==1){if(p&SCE_CTRL_LEFT)gameSelected=(gameSelected+5)%6;if(p&SCE_CTRL_RIGHT)gameSelected=(gameSelected+1)%6;if(p&SCE_CTRL_UP)rowSelected=(rowSelected+1)%2;if(p&SCE_CTRL_DOWN)rowSelected=(rowSelected+1)%2;if(p&SCE_CTRL_CROSS){const char* demo=(gameSelected%2)?"ux0:/data/VitaRetro/roms/demo.sfc":"ux0:/data/VitaRetro/roms/demo.md";char err[64];int lr=vrLaunchGame(demo,err,sizeof(err));if(lr<0)snprintf(launchMessage,sizeof(launchMessage),"LANCEMENT: %s",err);}if(p&SCE_CTRL_TRIANGLE){screenMode=2;menuSelected=1;}if(p&SCE_CTRL_CIRCLE){screenMode=0;menuSelected=2;}}else{if(p&SCE_CTRL_SELECT)globalSearch=!globalSearch;if(p&SCE_CTRL_CIRCLE){screenMode=1;menuSelected=2;}}if(screenMode==0)sourcePicker();else if(screenMode==1)home();else searchScreen();sceDisplaySetFrameBuf(&dfb,SCE_DISPLAY_SETBUF_NEXTFRAME);sceDisplayWaitVblankStart();}
-sceKernelFreeMemBlock(fb_uid);sceKernelExitProcess(0);return 0;}
+int main() {
+  vrSourcesLoad();
+  snprintf(launchMessage, sizeof(launchMessage), "RETROARCH: %s",
+           vrRetroArchPayloadPresent() ? "CORES PRESENTS - LANCEMENT A TESTER" : "CORES ABSENTS DU BUILD");
+  SceKernelAllocMemBlockOpt opt;
+  memset(&opt, 0, sizeof(opt));
+  opt.size = sizeof(opt);
+  opt.attr = SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_HAS_ALIGNMENT;
+  opt.alignment = 256 * 1024;
+  fb_uid = sceKernelAllocMemBlock("VitaRetroFB", SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
+                                   STRIDE * H * 4, &opt);
+  if (fb_uid < 0) return -1;
+  void* base = nullptr;
+  sceKernelGetMemBlockBase(fb_uid, &base);
+  fb = (uint32_t*)base;
+  SceDisplayFrameBuf dfb;
+  memset(&dfb, 0, sizeof(dfb));
+  dfb.size = sizeof(dfb);
+  dfb.base = fb;
+  dfb.pitch = STRIDE;
+  dfb.pixelformat = SCE_DISPLAY_PIXELFORMAT_A8B8G8R8;
+  dfb.width = W;
+  dfb.height = H;
+  sceDisplaySetFrameBuf(&dfb, SCE_DISPLAY_SETBUF_NEXTFRAME);
+  sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
+  SceCtrlData pad;
+  memset(&pad, 0, sizeof(pad));
+  unsigned old = 0;
+  bool run = true;
+  while (run) {
+    sceCtrlPeekBufferPositive(0, &pad, 1);
+    unsigned p = pad.buttons & ~old;
+    old = pad.buttons;
+    if (p & SCE_CTRL_START) run = false;
+    if (screenMode == 0) {
+      if (p & SCE_CTRL_LEFT) sourceSelected = (sourceSelected + 4) % 5;
+      if (p & SCE_CTRL_RIGHT) sourceSelected = (sourceSelected + 1) % 5;
+      if (p & SCE_CTRL_SQUARE) { vrPairStart(sourceSelected); screenMode = 3; }
+      if (p & SCE_CTRL_CROSS) {
+        if (*vrSource(sourceSelected).url) screenMode = 1;
+        else { vrPairStart(sourceSelected); screenMode = 3; }
+      }
+      if (p & SCE_CTRL_TRIANGLE) screenMode = 4;
+    } else if (screenMode == 1) {
+      if (p & SCE_CTRL_SQUARE) { vrPairStart(sourceSelected); screenMode = 3; }
+      if (p & SCE_CTRL_TRIANGLE) screenMode = 2;
+      if (p & SCE_CTRL_CIRCLE) screenMode = 0;
+    } else if (screenMode == 2) {
+      if (p & SCE_CTRL_SELECT) globalSearch = !globalSearch;
+      if (p & SCE_CTRL_CIRCLE) screenMode = 1;
+    } else if (screenMode == 3) {
+      vrPairPump();
+      if ((p & SCE_CTRL_CIRCLE) || ((p & SCE_CTRL_CROSS) && vrPairReceived())) {
+        vrPairStop(); screenMode = 0;
+      }
+    } else if (screenMode == 4) {
+      if (p & SCE_CTRL_LEFT) gameSelected = (gameSelected + 5) % 6;
+      if (p & SCE_CTRL_RIGHT) gameSelected = (gameSelected + 1) % 6;
+      if (p & SCE_CTRL_CROSS) {
+        const char* demo = (gameSelected % 2) ?
+          "ux0:/data/VitaRetro/roms/demo.sfc" : "ux0:/data/VitaRetro/roms/demo.md";
+        char err[64];
+        int lr = vrLaunchGame(demo, err, sizeof(err));
+        if (lr < 0) snprintf(launchMessage, sizeof(launchMessage), "LANCEMENT: %s", err);
+      }
+      if (p & SCE_CTRL_CIRCLE) screenMode = 0;
+    }
+    if (screenMode == 0) sourcePicker();
+    else if (screenMode == 1) home();
+    else if (screenMode == 2) searchScreen();
+    else if (screenMode == 3) pairingScreen();
+    else demoScreen();
+    sceDisplaySetFrameBuf(&dfb, SCE_DISPLAY_SETBUF_NEXTFRAME);
+    sceDisplayWaitVblankStart();
+  }
+  vrPairStop();
+  sceKernelFreeMemBlock(fb_uid);
+  sceKernelExitProcess(0);
+  return 0;
+}

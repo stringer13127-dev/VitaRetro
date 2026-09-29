@@ -14,6 +14,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(vitaretro
   src/main.cpp
   src/retroarch_manager.cpp
+  src/source_pairing.cpp
+  src/vendor/qrcodegen.c
 )
 
 target_link_libraries(vitaretro
@@ -23,6 +25,9 @@ target_link_libraries(vitaretro
   SceProcessmgr_stub
   SceAppMgr_stub
   SceIofilemgr_stub
+  SceNet_stub
+  SceNetCtl_stub
+  SceSysmodule_stub
 )
 
 vita_create_self(eboot.bin vitaretro)
