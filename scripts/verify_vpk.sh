@@ -25,6 +25,18 @@ with zipfile.ZipFile(vpk) as package:
         raise SystemExit("RetroArch files unexpectedly bundled in small VPK")
     if not all(package.getinfo(name).file_size for name in required):
         raise SystemExit("Empty required VPK file")
+    # The Vita package installer rejects RGB LiveArea artwork with 0x8010113D.
+    for name, dimensions in {
+        "sce_sys/icon0.png": (128, 128),
+        "sce_sys/livearea/contents/bg.png": (840, 500),
+        "sce_sys/livearea/contents/startup.png": (280, 158),
+    }.items():
+        data = package.read(name)
+        if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+            raise SystemExit(f"Invalid LiveArea PNG: {name}")
+        width, height, depth, color = struct.unpack(">IIBB", data[16:26])
+        if (width, height) != dimensions or depth != 8 or color != 3:
+            raise SystemExit(f"Unsupported Vita LiveArea PNG ({width}x{height}, depth {depth}, color {color}): {name}")
 
 expected = re.search(r'VR_PAYLOAD_SHA256\[\] = "([0-9a-f]{64})"', open(manifest).read()).group(1)
 with open(payload, "rb") as archive:

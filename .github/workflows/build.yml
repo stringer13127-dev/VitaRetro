@@ -13,11 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install archive extractor
+      - name: Install archive extractor and Vita PNG converter
         shell: bash
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends unzip zip p7zip-full
+          apt-get install -y --no-install-recommends unzip zip p7zip-full pngquant
 
       - name: Prepare RetroArch Vita and build VitaRetro
         shell: bash

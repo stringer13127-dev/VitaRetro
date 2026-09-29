@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+command -v pngquant >/dev/null || { echo "pngquant is required for Vita LiveArea images" >&2; exit 1; }
+for image in \
+  "$ROOT/assets/sce_sys/icon0.png" \
+  "$ROOT/assets/sce_sys/livearea/contents/bg.png" \
+  "$ROOT/assets/sce_sys/livearea/contents/startup.png"; do
+  pngquant --ext=.png --force -- "$image"
+done
 bash "$ROOT/scripts/prepare_retroarch.sh"
 : "${VITASDK:?VITASDK must point to VitaSDK}"
 python3 "$ROOT/scripts/pack_retroarch_payload.py" \
