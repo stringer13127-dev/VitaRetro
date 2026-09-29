@@ -8,11 +8,10 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 project(VitaRetro LANGUAGES C CXX)
 include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
-find_package(CURL REQUIRED)
 find_package(OpenSSL REQUIRED)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-include_directories(${CURL_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR} "${CMAKE_SOURCE_DIR}/vendor/retroarch")
+include_directories(${OPENSSL_INCLUDE_DIR} "${CMAKE_SOURCE_DIR}/vendor/retroarch")
 
 add_executable(vitaretro
   src/main.cpp
@@ -34,8 +33,7 @@ target_link_libraries(vitaretro
   SceSysmodule_stub
   SceHttp_stub
   SceSsl_stub
-  ${CURL_LIBRARIES}
-  ${OPENSSL_LIBRARIES}
+  crypto
   z
 )
 
@@ -48,11 +46,9 @@ set(VPK_FILES
   FILE assets/sce_sys/livearea/contents/template.xml sce_sys/livearea/contents/template.xml
 )
 
-if(NOT EXISTS "${CMAKE_SOURCE_DIR}/vendor/cacert.pem" OR
-   NOT EXISTS "${CMAKE_SOURCE_DIR}/vendor/retroarch/payload_manifest.hpp")
-  message(FATAL_ERROR "Prepare the RetroArch payload and CA bundle before configuring")
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/vendor/retroarch/payload_manifest.hpp")
+  message(FATAL_ERROR "Prepare the RetroArch payload before configuring")
 endif()
-list(APPEND VPK_FILES FILE "${CMAKE_SOURCE_DIR}/vendor/cacert.pem" "cacert.pem")
 
 vita_create_vpk(VitaRetro_0.1_DEV.vpk VRET00001 eboot.bin
   VERSION 00.10

@@ -4,8 +4,9 @@
 #include <psp2/io/stat.h>
 #include <psp2/net/net.h>
 #include <psp2/net/netctl.h>
+#include <psp2/net/http.h>
+#include <psp2/libssl.h>
 #include <psp2/sysmodule.h>
-#include <curl/curl.h>
 #include <openssl/sha.h>
 #include <zlib.h>
 #include <stdint.h>
@@ -15,7 +16,7 @@
 static const char* kPayload = "ux0:/data/VitaRetro/VitaRetro_0.1_DEV_RetroArch.vrp";
 static const char* kPartial = "ux0:/data/VitaRetro/retroarch-download.part";
 static const char* kInstalled = "ux0:/data/VitaRetro/.retroarch_deployed_1_22_2";
-static unsigned char netMemory[4 * 1024 * 1024];
+static unsigned char netMemory[8 * 1024 * 1024];
 
 static void setError(char* error, size_t capacity, const char* message, int detail = 0) {
   if (error && capacity) snprintf(error, capacity, detail ? "%s %08X" : "%s", message, (unsigned)detail);
@@ -99,75 +100,74 @@ static bool sha256Matches(const char* path, VrDeployProgress progress) {
   return strcmp(hex, VR_PAYLOAD_SHA256) == 0;
 }
 
-struct DownloadContext { SceUID fd; VrDeployProgress progress; };
-
-static size_t writeDownload(char* data, size_t size, size_t number, void* user) {
-  DownloadContext* ctx = (DownloadContext*)user;
-  if (number && size > SIZE_MAX / number) return 0;
-  size_t length = size * number, sent = 0;
-  while (sent < length) {
-    int n = sceIoWrite(ctx->fd, data + sent, length - sent);
-    if (n <= 0) return sent;
-    sent += n;
-  }
-  return sent;
-}
-
-static int downloadProgress(void* user, curl_off_t total, curl_off_t current,
-                            curl_off_t, curl_off_t) {
-  DownloadContext* ctx = (DownloadContext*)user;
-  if (ctx->progress) ctx->progress("TELECHARGEMENT", current, total);
-  return 0;
-}
-
 static int downloadPayload(VrDeployProgress progress) {
-  int result = sceSysmoduleLoadModule(SCE_SYSMODULE_NET);
+  // The Vita's native HTTPS stack avoids a curl/OpenSSL ABI mismatch in the
+  // current VitaSDK image. Keep TLS certificate checks at their default.
+  int result = sceSysmoduleLoadModule(SCE_SYSMODULE_HTTPS);
   if (result < 0) return result;
   SceNetInitParam init = {netMemory, sizeof(netMemory), 0};
   result = sceNetInit(&init);
-  if (result < 0) { sceSysmoduleUnloadModule(SCE_SYSMODULE_NET); return result; }
+  if (result < 0) { sceSysmoduleUnloadModule(SCE_SYSMODULE_HTTPS); return result; }
   result = sceNetCtlInit();
-  if (result < 0) { sceNetTerm(); sceSysmoduleUnloadModule(SCE_SYSMODULE_NET); return result; }
-
-  result = -1;
-  if (curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK) {
-    SceUID fd = sceIoOpen(kPartial, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
-    if (fd >= 0) {
-      DownloadContext context = {fd, progress};
-      CURL* curl = curl_easy_init();
-      if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, VR_PAYLOAD_URL);
-        curl_easy_setopt(curl, CURLOPT_USERAGENT, "VitaRetro/0.1 DEV PS Vita");
-        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
-        curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 20L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-        curl_easy_setopt(curl, CURLOPT_CAINFO, "app0:/cacert.pem");
-        curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
-        curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeDownload);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &context);
-        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, downloadProgress);
-        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &context);
-        CURLcode code = curl_easy_perform(curl);
-        long status = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
-        if (code == CURLE_OK && status == 200) result = 0;
-        else result = -1000 - (int)code;
-        curl_easy_cleanup(curl);
+  if (result < 0) { sceNetTerm(); sceSysmoduleUnloadModule(SCE_SYSMODULE_HTTPS); return result; }
+  result = sceHttpInit(4 * 1024 * 1024);
+  if (result < 0) goto network_done;
+  result = sceSslInit(4 * 1024 * 1024);
+  if (result < 0) goto http_done;
+  {
+    int tpl = sceHttpCreateTemplate("VitaRetro/0.1 DEV PS Vita", 2, 1);
+    if (tpl < 0) { result = tpl; goto ssl_done; }
+    result = sceHttpSetAutoRedirect(tpl, 1);
+    if (result < 0) { sceHttpDeleteTemplate(tpl); goto ssl_done; }
+    int connection = sceHttpCreateConnectionWithURL(tpl, VR_PAYLOAD_URL, 0);
+    if (connection < 0) { result = connection; sceHttpDeleteTemplate(tpl); goto ssl_done; }
+    int request = sceHttpCreateRequestWithURL(connection, SCE_HTTP_METHOD_GET, VR_PAYLOAD_URL, 0);
+    if (request < 0) { result = request; sceHttpDeleteConnection(connection); sceHttpDeleteTemplate(tpl); goto ssl_done; }
+    result = sceHttpSendRequest(request, nullptr, 0);
+    if (result >= 0) {
+      int status = 0;
+      result = sceHttpGetStatusCode(request, &status);
+      if (result >= 0 && status != 200) result = -1000 - status;
+    }
+    if (result >= 0) {
+      unsigned long long total = 0;
+      if (sceHttpGetResponseContentLength(request, &total) < 0) total = 0;
+      SceUID fd = sceIoOpen(kPartial, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
+      if (fd < 0) result = fd;
+      else {
+        char buffer[32768];
+        uint64_t current = 0;
+        int n;
+        while ((n = sceHttpReadData(request, buffer, sizeof(buffer))) > 0) {
+          int offset = 0;
+          while (offset < n) {
+            int written = sceIoWrite(fd, buffer + offset, n - offset);
+            if (written <= 0) { result = written < 0 ? written : -1; break; }
+            offset += written;
+          }
+          if (result < 0) break;
+          current += n;
+          if (progress && (current % (256 * 1024) < sizeof(buffer)))
+            progress("TELECHARGEMENT", current, total);
+        }
+        if (result >= 0 && n < 0) result = n;
+        if (result >= 0 && (!current || (total && current != total))) result = -1;
+        if (progress) progress("TELECHARGEMENT", current, total);
+        sceIoClose(fd);
       }
-      sceIoClose(fd);
-    } else result = fd;
-    curl_global_cleanup();
+    }
+    sceHttpDeleteRequest(request);
+    sceHttpDeleteConnection(connection);
+    sceHttpDeleteTemplate(tpl);
   }
+ssl_done:
+  sceSslTerm();
+http_done:
+  sceHttpTerm();
+network_done:
   sceNetCtlTerm();
   sceNetTerm();
-  sceSysmoduleUnloadModule(SCE_SYSMODULE_NET);
+  sceSysmoduleUnloadModule(SCE_SYSMODULE_HTTPS);
   if (result == 0) {
     sceIoRemove(kPayload);
     result = sceIoRename(kPartial, kPayload);

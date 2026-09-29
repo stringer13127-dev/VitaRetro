@@ -18,7 +18,7 @@ vpk, payload, manifest = sys.argv[1:]
 with zipfile.ZipFile(vpk) as package:
     names = set(package.namelist())
     required = {"eboot.bin", "sce_sys/param.sfo", "sce_sys/icon0.png",
-                "sce_sys/livearea/contents/template.xml", "cacert.pem"}
+                "sce_sys/livearea/contents/template.xml"}
     if not required <= names or len(names) > 30:
         raise SystemExit("Unexpected small VPK contents: " + str(names))
     if any(n.startswith("retroarch/") or n.startswith("retroarch-data/") for n in names):

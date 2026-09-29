@@ -3,7 +3,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 bash "$ROOT/scripts/prepare_retroarch.sh"
 : "${VITASDK:?VITASDK must point to VitaSDK}"
-cp /etc/ssl/certs/ca-certificates.crt "$ROOT/vendor/cacert.pem"
 python3 "$ROOT/scripts/pack_retroarch_payload.py" \
   "$ROOT/vendor/retroarch/vpk" \
   "$ROOT/vendor/retroarch/package/retroarch-data" \
