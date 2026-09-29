@@ -8,12 +8,16 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 project(VitaRetro LANGUAGES C CXX)
 include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
+find_package(CURL REQUIRED)
+find_package(OpenSSL REQUIRED)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include_directories(${CURL_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR} "${CMAKE_SOURCE_DIR}/vendor/retroarch")
 
 add_executable(vitaretro
   src/main.cpp
   src/retroarch_manager.cpp
+  src/retroarch_deployer.cpp
   src/source_pairing.cpp
   src/vendor/qrcodegen.c
 )
@@ -28,6 +32,11 @@ target_link_libraries(vitaretro
   SceNet_stub
   SceNetCtl_stub
   SceSysmodule_stub
+  SceHttp_stub
+  SceSsl_stub
+  ${CURL_LIBRARIES}
+  ${OPENSSL_LIBRARIES}
+  z
 )
 
 vita_create_self(eboot.bin vitaretro)
@@ -39,16 +48,11 @@ set(VPK_FILES
   FILE assets/sce_sys/livearea/contents/template.xml sce_sys/livearea/contents/template.xml
 )
 
-# Keep the package small and fail at configuration when the official payload is
-# absent. Vita loads each core as a separate statically linked SELF executable.
-set(RETROARCH_CORE_NAMES snes9x2005_plus genesis_plus_gx fceumm gambatte gpsp pcsx_rearmed)
-foreach(core_name IN LISTS RETROARCH_CORE_NAMES)
-  set(core "${CMAKE_SOURCE_DIR}/vendor/retroarch/vpk/${core_name}_libretro.self")
-  if(NOT EXISTS "${core}")
-    message(FATAL_ERROR "Official RetroArch Vita core missing: ${core}")
-  endif()
-  list(APPEND VPK_FILES FILE "${core}" "retroarch/${core_name}_libretro.self")
-endforeach()
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/vendor/cacert.pem" OR
+   NOT EXISTS "${CMAKE_SOURCE_DIR}/vendor/retroarch/payload_manifest.hpp")
+  message(FATAL_ERROR "Prepare the RetroArch payload and CA bundle before configuring")
+endif()
+list(APPEND VPK_FILES FILE "${CMAKE_SOURCE_DIR}/vendor/cacert.pem" "cacert.pem")
 
 vita_create_vpk(VitaRetro_0.1_DEV.vpk VRET00001 eboot.bin
   VERSION 00.10

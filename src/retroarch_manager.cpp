@@ -64,87 +64,6 @@ bool vrRetroArchPayloadPresent() {
   return true;
 }
 
-static int makeDirIfNeeded(const char* path) {
-  int r = sceIoMkdir(path, 0777);
-  if (r >= 0) return 0;
-  SceIoStat st;
-  memset(&st, 0, sizeof(st));
-  return sceIoGetstat(path, &st) >= 0 ? 0 : r;
-}
-
-static int copyFile(const char* from, const char* to) {
-  // Preserve files from an existing RetroArch installation, including settings.
-  if (vrFileExists(to)) return 0;
-  char temporary[512];
-  int length = snprintf(temporary, sizeof(temporary), "%s.vr-tmp", to);
-  if (length < 0 || length >= (int)sizeof(temporary)) return -1;
-  SceUID input = sceIoOpen(from, SCE_O_RDONLY, 0);
-  if (input < 0) return input;
-  SceUID output = sceIoOpen(temporary, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
-  if (output < 0) { sceIoClose(input); return output; }
-  char buffer[16384];
-  int result = 0, count;
-  while ((count = sceIoRead(input, buffer, sizeof(buffer))) > 0) {
-    int written = 0;
-    while (written < count) {
-      int n = sceIoWrite(output, buffer + written, count - written);
-      if (n <= 0) { result = n < 0 ? n : -1; break; }
-      written += n;
-    }
-    if (result < 0) break;
-  }
-  if (count < 0 && result == 0) result = count;
-  sceIoClose(output);
-  sceIoClose(input);
-  if (result == 0) result = sceIoRename(temporary, to);
-  if (result < 0) sceIoRemove(temporary);
-  return result;
-}
-
-static int copyTree(const char* from, const char* to) {
-  int result = makeDirIfNeeded(to);
-  if (result < 0) return result;
-  SceUID dir = sceIoDopen(from);
-  if (dir < 0) return dir;
-  SceIoDirent entry;
-  memset(&entry, 0, sizeof(entry));
-  int n = 0;
-  while ((n = sceIoDread(dir, &entry)) > 0) {
-    if (strcmp(entry.d_name, ".") == 0 || strcmp(entry.d_name, "..") == 0) continue;
-    char source[512], target[512];
-    int sl = snprintf(source, sizeof(source), "%s/%s", from, entry.d_name);
-    int tl = snprintf(target, sizeof(target), "%s/%s", to, entry.d_name);
-    if (sl < 0 || sl >= (int)sizeof(source) || tl < 0 || tl >= (int)sizeof(target)) {
-      result = -1; break;
-    }
-    SceUID child = sceIoDopen(source);
-    if (child >= 0) {
-      sceIoDclose(child);
-      result = copyTree(source, target);
-    } else {
-      result = copyFile(source, target);
-    }
-    if (result < 0) break;
-    memset(&entry, 0, sizeof(entry));
-  }
-  if (n < 0 && result == 0) result = n;
-  sceIoDclose(dir);
-  return result;
-}
-
-int vrEnsureRetroArchData() {
-  if (makeDirIfNeeded("ux0:/data/VitaRetro") < 0 ||
-      makeDirIfNeeded("ux0:/data/VitaRetro/roms") < 0) return -1;
-  const char* marker = "ux0:/data/retroarch/.vitaretro_1_22_2";
-  if (vrFileExists(marker)) return 0;
-  int result = copyTree("app0:/retroarch-data", "ux0:/data/retroarch");
-  if (result < 0) return result;
-  SceUID done = sceIoOpen(marker, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
-  if (done < 0) return done;
-  sceIoClose(done);
-  return 0;
-}
-
 int vrLaunchGame(const char* rom_path, char* error, size_t error_size) {
   if (error && error_size) error[0] = 0;
   if (!rom_path || !vrFileExists(rom_path)) {
@@ -162,8 +81,8 @@ int vrLaunchGame(const char* rom_path, char* error, size_t error_size) {
     if (error && error_size) snprintf(error, error_size, "CORE RETROARCH ABSENT");
     return -3;
   }
-  if (vrEnsureRetroArchData() < 0) {
-    if (error && error_size) snprintf(error, error_size, "DONNEES RETROARCH INDISPONIBLES");
+  if (!vrFileExists("ux0:/data/VitaRetro/.retroarch_deployed_1_22_2")) {
+    if (error && error_size) snprintf(error, error_size, "DEPLOIE RETROARCH D ABORD");
     return -4;
   }
 

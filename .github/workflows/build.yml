@@ -26,12 +26,14 @@ jobs:
 
       - name: Verify package contents
         shell: bash
-        run: bash scripts/verify_vpk.sh VitaRetro_0.1_DEV.vpk
+        run: bash scripts/verify_vpk.sh VitaRetro_0.1_DEV.vpk VitaRetro_0.1_DEV_RetroArch.vrp
 
       - uses: actions/upload-artifact@v4
         with:
           name: VitaRetro-0.1-DEV
-          path: VitaRetro_0.1_DEV.vpk
+          path: |
+            VitaRetro_0.1_DEV.vpk
+            VitaRetro_0.1_DEV_RetroArch.vrp
           if-no-files-found: error
           retention-days: 30
 
@@ -50,13 +52,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           test -s VitaRetro_0.1_DEV.vpk
+          test -s VitaRetro_0.1_DEV_RetroArch.vrp
           if gh release view 0.1-dev --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             # This mutable DEV prerelease always points to the source used for its VPK.
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/0.1-dev" \
               -f sha="$GITHUB_SHA" -F force=true
-            gh release upload 0.1-dev VitaRetro_0.1_DEV.vpk --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload 0.1-dev VitaRetro_0.1_DEV.vpk VitaRetro_0.1_DEV_RetroArch.vrp --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create 0.1-dev VitaRetro_0.1_DEV.vpk \
+            gh release create 0.1-dev VitaRetro_0.1_DEV.vpk VitaRetro_0.1_DEV_RetroArch.vrp \
               --repo "$GITHUB_REPOSITORY" \
               --title "VitaRetro 0.1 DEV" \
               --notes "Build de test PS Vita. Version 0.1 DEV jusqu'a validation de l'installation et du demarrage sur Vita." \

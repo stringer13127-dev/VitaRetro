@@ -3,6 +3,9 @@
 The VitaRetro repository does not contain a RetroArch binary, core, ROM, or BIOS.
 The cloud build fetches RetroArch 1.22.2 Vita VPK and data directly from
 https://buildbot.libretro.com/stable/1.22.2/playstation/vita/ .
+The small VitaRetro VPK does not contain those binaries. A separate release
+asset contains the six selected official Vita SELF cores and official data;
+VitaRetro verifies its SHA-256 before deploying it on the Vita.
 
 RetroArch and its individual cores are separate upstream works with their own
 licenses. The VitaRetro MIT license applies only to VitaRetro's original source
