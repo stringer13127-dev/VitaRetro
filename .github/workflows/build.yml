@@ -51,6 +51,9 @@ jobs:
         run: |
           test -s VitaRetro_0.1_DEV.vpk
           if gh release view 0.1-dev --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # This mutable DEV prerelease always points to the source used for its VPK.
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/0.1-dev" \
+              -f sha="$GITHUB_SHA" -F force=true
             gh release upload 0.1-dev VitaRetro_0.1_DEV.vpk --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create 0.1-dev VitaRetro_0.1_DEV.vpk \
