@@ -9,7 +9,9 @@
 #include "source_pairing.hpp"
 #include "vendor/qrcodegen.h"
 
-static const int W=960,H=544,STRIDE=960;
+static const int W=960,H=544,STRIDE=1024;
+static const unsigned FB_ALIGN=256*1024;
+static unsigned alignUp(unsigned value,unsigned alignment){return (value+alignment-1)&~(alignment-1);}
 static uint32_t* fb=nullptr; static SceUID fb_uid=-1;
 static SceDisplayFrameBuf dfb;
 static uint32_t rgb(uint8_t r,uint8_t g,uint8_t b){return 0xFF000000u|((uint32_t)b<<16)|((uint32_t)g<<8)|r;}
@@ -60,16 +62,19 @@ int main() {
   coresReady=vrRetroArchPayloadPresent();
   snprintf(launchMessage, sizeof(launchMessage), "RETROARCH: %s",
            coresReady ? "COEURS PRESENTS - LANCEMENT A TESTER" : "A DEPLOYER AVEC SELECT");
-  SceKernelAllocMemBlockOpt opt;
-  memset(&opt, 0, sizeof(opt));
-  opt.size = sizeof(opt);
-  opt.attr = SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_HAS_ALIGNMENT;
-  opt.alignment = 256 * 1024;
+  // Vita CDRAM framebuffer: use the SDK sample's 1024-pixel stride and
+  // round the allocation to a 256 KiB boundary. The old build could exit
+  // before its first frame because the allocation requested a non-rounded size.
+  const unsigned framebufferBytes = (unsigned)(STRIDE * H * 4);
+  const unsigned framebufferAlloc = alignUp(framebufferBytes, FB_ALIGN);
   fb_uid = sceKernelAllocMemBlock("VitaRetroFB", SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
-                                   STRIDE * H * 4, &opt);
+                                   framebufferAlloc, nullptr);
   if (fb_uid < 0) return -1;
   void* base = nullptr;
-  sceKernelGetMemBlockBase(fb_uid, &base);
+  if (sceKernelGetMemBlockBase(fb_uid, &base) < 0 || !base) {
+    sceKernelFreeMemBlock(fb_uid);
+    return -2;
+  }
   fb = (uint32_t*)base;
   memset(&dfb, 0, sizeof(dfb));
   dfb.size = sizeof(dfb);
