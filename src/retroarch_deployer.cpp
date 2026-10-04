@@ -284,6 +284,9 @@ static int extractPayload(VrDeployProgress progress) {
 
 int vrDeployRetroArch(VrDeployProgress progress, char* error, size_t errorSize) {
   if (error && errorSize) error[0] = 0;
+  // Reuse an already installed RetroArch Vita and its cores. Never attempt
+  // the HTTPS download in this case.
+  if (vrExternalRetroArchPresent()) return 0;
   if (vrRetroArchPayloadPresent() && vrFileExists(kInstalled)) return 0;
   int result = makeDir("ux0:/data/VitaRetro");
   if (result < 0) { setError(error, errorSize, "STOCKAGE INDISPONIBLE", result); return result; }
