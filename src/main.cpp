@@ -12,7 +12,7 @@
 static const int W=960,H=544,STRIDE=1024;
 static const unsigned FB_ALIGN=256*1024;
 static unsigned alignUp(unsigned value,unsigned alignment){return (value+alignment-1)&~(alignment-1);}
-static uint32_t* fb=nullptr; static SceUID fb_uid=-1;
+static uint32_t* fb=nullptr; static uint32_t* fb2=nullptr; static SceUID fb_uid=-1;
 static SceDisplayFrameBuf dfb;
 static uint32_t rgb(uint8_t r,uint8_t g,uint8_t b){return 0xFF000000u|((uint32_t)b<<16)|((uint32_t)g<<8)|r;}
 static void clear(uint32_t c){for(int i=0;i<STRIDE*H;i++)fb[i]=c;}
@@ -67,8 +67,9 @@ int main() {
   // before its first frame because the allocation requested a non-rounded size.
   const unsigned framebufferBytes = (unsigned)(STRIDE * H * 4);
   const unsigned framebufferAlloc = alignUp(framebufferBytes, FB_ALIGN);
+  const unsigned framebufferTotal = framebufferAlloc * 2;
   fb_uid = sceKernelAllocMemBlock("VitaRetroFB", SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
-                                   framebufferAlloc, nullptr);
+                                   framebufferTotal, nullptr);
   if (fb_uid < 0) return -1;
   void* base = nullptr;
   if (sceKernelGetMemBlockBase(fb_uid, &base) < 0 || !base) {
@@ -76,6 +77,9 @@ int main() {
     return -2;
   }
   fb = (uint32_t*)base;
+  fb2 = (uint32_t*)((uint8_t*)base + framebufferAlloc);
+  memset(fb, 0, framebufferBytes);
+  memset(fb2, 0, framebufferBytes);
   memset(&dfb, 0, sizeof(dfb));
   dfb.size = sizeof(dfb);
   dfb.base = fb;
@@ -147,8 +151,11 @@ int main() {
     else if (screenMode == 3) pairingScreen();
     else if (screenMode == 4) demoScreen();
     else deployScreen();
+    dfb.base = fb;
     sceDisplaySetFrameBuf(&dfb, SCE_DISPLAY_SETBUF_NEXTFRAME);
     sceDisplayWaitVblankStart();
+    uint32_t* displayed = fb;
+    fb = (displayed == (uint32_t*)base) ? fb2 : (uint32_t*)base;
   }
   vrPairStop();
   sceKernelFreeMemBlock(fb_uid);
