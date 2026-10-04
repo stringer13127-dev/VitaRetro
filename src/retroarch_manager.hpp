@@ -22,6 +22,7 @@ VrSystem vrDetectSystemFromPath(const char* path);
 VrLaunchPlan vrResolveLaunchPlan(VrSystem system);
 bool vrFileExists(const char* path);
 bool vrRetroArchPayloadPresent();
+bool vrExternalRetroArchPresent();
 typedef void (*VrDeployProgress)(const char* stage, uint64_t completed, uint64_t total);
 int vrDeployRetroArch(VrDeployProgress progress, char* error, size_t error_size);
 int vrLaunchGame(const char* rom_path, char* error, size_t error_size);
