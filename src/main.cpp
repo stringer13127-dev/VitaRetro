@@ -34,6 +34,7 @@ static int screenMode=0; // 0 sources, 1 source detail, 2 search, 3 pairing, 4 d
 static int sourceSelected=0, menuSelected=1, gameSelected=0, rowSelected=0;
 static bool globalSearch=false;
 static bool coresReady=false;
+static uint32_t* framebufferBase=nullptr;
 static char launchMessage[96]="RETROARCH: VERIFICATION...";
 static char deployMessage[96]="X POUR TELECHARGER ET DEPLOYER RETROARCH";
 static const char* menuItems[7]={"SOURCE","RECHERCHE & FILTRES","ACCUEIL","JEUX","EMULATEURS","HOMEBREWS","PARAMETRES"};
@@ -52,14 +53,20 @@ static void home(){clear(BG);sidebar();text(248,24,"SOURCE CONFIGUREE",TEXT,3);t
 
 static void toggle(int x,int y,bool on){rect(x,y,64,24,on?ACCENT:rgb(92,92,92));rect(on?x+42:x+4,y+4,18,16,WHITE);}
 static void chip(int x,int y,const char*s,bool active){int w=tw(s,1)+24;rect(x,y,w,28,active?PANEL2:PANEL);border(x,y,w,28,1,active?WHITE:rgb(72,72,72));text(x+12,y+10,s,active?TEXT:MUTED,1);}
-static void searchScreen(){clear(BG);sidebar();menuSelected=1;text(248,24,"RECHERCHE & FILTRES",TEXT,3);text(248,88,"RECHERCHE GLOBALE",TEXT,2);toggle(480,82,globalSearch);text(248,146,"AUCUN CATALOGUE CONNECTE AUX SOURCES",MUTED,2);text(248,184,"L AJOUT D URL EST DISPONIBLE DEPUIS SOURCES",MUTED,1);status("SELECT GLOBAL  O RETOUR");}
+static void searchScreen(){clear(BG);sidebar();text(248,24,"RECHERCHE & FILTRES",TEXT,3);text(248,88,"RECHERCHE GLOBALE",TEXT,2);toggle(480,82,globalSearch);text(248,146,"AUCUN CATALOGUE CONNECTE AUX SOURCES",MUTED,2);text(248,184,"L AJOUT D URL EST DISPONIBLE DEPUIS SOURCES",MUTED,1);status("SELECT GLOBAL  O RETOUR");}
 static void demoScreen(){clear(BG);text(248,24,"DEMO LOCALE - AUCUN JEU INCLUS",TEXT,2);row(88,"FICHIERS DE TEST PERSONNELS",0);text(248,310,"PLACE DEMO.SFC OU DEMO.MD DANS UX0:/DATA/VITARETRO/ROMS",MUTED,1);text(248,448,launchMessage,MUTED,1);status("X TESTER SON FICHIER LOCAL  O SOURCES");}
-static void deployScreen(){clear(BG);text(76,67,"DEPLOYER RETROARCH VITA",TEXT,3);text(76,122,"TELECHARGEMENT OFFICIEL PREPARE DANS LE CLOUD",TEXT,1);text(76,158,"SIX COEURS ET DONNEES INSTALLES AUTOMATIQUEMENT",MUTED,1);text(76,237,deployMessage,ACCENT,2);text(76,292,"UNE CONNEXION WIFI ET DE L ESPACE LIBRE SONT NECESSAIRES",MUTED,1);text(76,325,"SI LE TELECHARGEMENT ECHOUE, TU PEUX REESSAYER",MUTED,1);status("X DEPLOYER  O RETOUR AUX SOURCES");}
-static void dataProgress(const char* stage,uint64_t completed,uint64_t total){static uint64_t last=0;static const char* previous=nullptr;if(stage!=previous||completed<last){last=0;previous=stage;}if(stage[0]=='T'&&completed<total&&completed<last+256*1024)return;last=completed;clear(BG);text(80,124,"DEPLOIEMENT RETROARCH VITA",TEXT,2);text(80,165,stage,ACCENT,2);rect(80,238,800,30,PANEL2);if(total)rect(80,238,(int)(completed*800/total),30,ACCENT);char label[80];if(total)snprintf(label,sizeof(label),"%llu / %llu",(unsigned long long)completed,(unsigned long long)total);else snprintf(label,sizeof(label),"%llu OCTETS",(unsigned long long)completed);text(80,294,label,TEXT,2);sceDisplaySetFrameBuf(&dfb,SCE_DISPLAY_SETBUF_NEXTFRAME);sceDisplayWaitVblankStart();}
+static void deployScreen(){clear(BG);text(76,67,"DEPLOYER RETROARCH VITA",TEXT,3);text(76,122,vrExternalRetroArchPresent()?"RETROARCH VITA DEJA INSTALLE":"TELECHARGEMENT OFFICIEL PREPARE DANS LE CLOUD",TEXT,1);text(76,158,vrExternalRetroArchPresent()?"VITARETRO VA UTILISER TON INSTALLATION EXISTANTE":"SIX COEURS ET DONNEES INSTALLES AUTOMATIQUEMENT",MUTED,1);text(76,237,deployMessage,ACCENT,2);text(76,292,"UNE CONNEXION WIFI ET DE L ESPACE LIBRE SONT NECESSAIRES",MUTED,1);text(76,325,"SI LE TELECHARGEMENT ECHOUE, TU PEUX REESSAYER",MUTED,1);status("X DEPLOYER  O RETOUR AUX SOURCES");}
+static void presentFrame(bool swap=true){
+  dfb.base=fb;
+  sceDisplaySetFrameBuf(&dfb,SCE_DISPLAY_SETBUF_NEXTFRAME);
+  sceDisplayWaitVblankStart();
+  if(swap) fb=(fb==(uint32_t*)framebufferBase)?fb2:(uint32_t*)framebufferBase;
+}
+static void dataProgress(const char* stage,uint64_t completed,uint64_t total){static uint64_t last=0;static const char* previous=nullptr;if(stage!=previous||completed<last){last=0;previous=stage;}if(stage[0]=='T'&&completed<total&&completed<last+256*1024)return;last=completed;clear(BG);text(80,124,"DEPLOIEMENT RETROARCH VITA",TEXT,2);text(80,165,stage,ACCENT,2);rect(80,238,800,30,PANEL2);if(total)rect(80,238,(int)(completed*800/total),30,ACCENT);char label[80];if(total)snprintf(label,sizeof(label),"%llu / %llu",(unsigned long long)completed,(unsigned long long)total);else snprintf(label,sizeof(label),"%llu OCTETS",(unsigned long long)completed);text(80,294,label,TEXT,2);presentFrame(true);}
 
 int main() {
   vrSourcesLoad();
-  coresReady=vrRetroArchPayloadPresent();
+  coresReady=vrRetroArchPayloadPresent() || vrExternalRetroArchPresent();
   snprintf(launchMessage, sizeof(launchMessage), "RETROARCH: %s",
            coresReady ? "COEURS PRESENTS - LANCEMENT A TESTER" : "A DEPLOYER AVEC SELECT");
   // Vita CDRAM framebuffer: use the SDK sample's 1024-pixel stride and
@@ -77,6 +84,7 @@ int main() {
     return -2;
   }
   fb = (uint32_t*)base;
+  framebufferBase = (uint32_t*)base;
   fb2 = (uint32_t*)((uint8_t*)base + framebufferAlloc);
   memset(fb, 0, framebufferBytes);
   memset(fb2, 0, framebufferBytes);
@@ -104,17 +112,30 @@ int main() {
       if (p & SCE_CTRL_SQUARE) { vrPairStart(sourceSelected); screenMode = 3; }
       if (p & SCE_CTRL_SELECT) screenMode = 5;
       if (p & SCE_CTRL_CROSS) {
-        if (*vrSource(sourceSelected).url) screenMode = 1;
+        if (*vrSource(sourceSelected).url) { menuSelected=2; screenMode=1; }
         else { vrPairStart(sourceSelected); screenMode = 3; }
       }
-      if (p & SCE_CTRL_TRIANGLE) screenMode = 4;
+      if (p & SCE_CTRL_TRIANGLE) { menuSelected=1; screenMode = 2; }
     } else if (screenMode == 1) {
+      if (p & SCE_CTRL_DOWN) menuSelected = menuSelected < 6 ? menuSelected + 1 : 1;
+      if (p & SCE_CTRL_UP) menuSelected = menuSelected > 1 ? menuSelected - 1 : 6;
       if (p & SCE_CTRL_SQUARE) { vrPairStart(sourceSelected); screenMode = 3; }
-      if (p & SCE_CTRL_TRIANGLE) screenMode = 2;
+      if (p & SCE_CTRL_TRIANGLE) { menuSelected=1; screenMode = 2; }
       if (p & SCE_CTRL_CIRCLE) screenMode = 0;
+      if (p & SCE_CTRL_CROSS) {
+        if (menuSelected == 1) screenMode=2;
+        else if (menuSelected == 2) screenMode=1;
+        else if (menuSelected == 3) screenMode=4;
+        else if (menuSelected == 4) { snprintf(launchMessage,sizeof(launchMessage),"EMULATEURS : RETROARCH VITA PRET"); screenMode=1; }
+        else if (menuSelected == 5) { snprintf(launchMessage,sizeof(launchMessage),"HOMEBREWS : CATALOGUE A CONNECTER"); screenMode=1; }
+        else if (menuSelected == 6) { snprintf(launchMessage,sizeof(launchMessage),"PARAMETRES : SELECT POUR RETROARCH"); screenMode=1; }
+      }
     } else if (screenMode == 2) {
-      if (p & SCE_CTRL_SELECT) globalSearch = !globalSearch;
+      if (p & SCE_CTRL_UP) menuSelected = menuSelected > 1 ? menuSelected - 1 : 6;
+      if (p & SCE_CTRL_DOWN) menuSelected = menuSelected < 6 ? menuSelected + 1 : 1;
+      if (p & SCE_CTRL_SELECT || p & SCE_CTRL_CROSS) globalSearch = !globalSearch;
       if (p & SCE_CTRL_CIRCLE) screenMode = 1;
+      if (p & SCE_CTRL_SQUARE) { vrPairStart(sourceSelected); screenMode = 3; }
     } else if (screenMode == 3) {
       vrPairPump();
       if ((p & SCE_CTRL_CIRCLE) || ((p & SCE_CTRL_CROSS) && vrPairReceived())) {
@@ -151,11 +172,7 @@ int main() {
     else if (screenMode == 3) pairingScreen();
     else if (screenMode == 4) demoScreen();
     else deployScreen();
-    dfb.base = fb;
-    sceDisplaySetFrameBuf(&dfb, SCE_DISPLAY_SETBUF_NEXTFRAME);
-    sceDisplayWaitVblankStart();
-    uint32_t* displayed = fb;
-    fb = (displayed == (uint32_t*)base) ? fb2 : (uint32_t*)base;
+    presentFrame(true);
   }
   vrPairStop();
   sceKernelFreeMemBlock(fb_uid);
